@@ -1,10 +1,13 @@
 package com.app.todo.controller;
 
+import com.app.todo.dto.request.AiTaskBreakdownRequest;
 import com.app.todo.dto.request.TodoRequest;
+import com.app.todo.dto.response.AiSubtaskResponse;
 import com.app.todo.dto.response.ApiResponse;
 import com.app.todo.dto.response.TodoResponse;
 import com.app.todo.model.TodoStatus;
 import com.app.todo.security.CustomUserDetails;
+import com.app.todo.service.GeminiAiService;
 import com.app.todo.service.TodoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +24,7 @@ import java.util.List;
 public class TodoController {
 
     private final TodoService todoService;
+    private final GeminiAiService geminiAiService;
 
     @PostMapping
     public ResponseEntity<TodoResponse> createTodo(
@@ -61,5 +65,29 @@ public class TodoController {
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         todoService.deleteTodo(id, currentUser.getId());
         return ResponseEntity.ok(new ApiResponse(true, "Todo deleted successfully."));
+    }
+
+    @PostMapping("/ai/breakdown")
+    public ResponseEntity<List<AiSubtaskResponse>> breakdownGoal(
+            @Valid @RequestBody AiTaskBreakdownRequest request) {
+        List<AiSubtaskResponse> subtasks = geminiAiService.generateSubtasks(request);
+        return ResponseEntity.ok(subtasks);
+    }
+
+    @PostMapping("/ai/breakdown/save")
+    public ResponseEntity<List<TodoResponse>> breakdownAndSave(
+            @Valid @RequestBody AiTaskBreakdownRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        List<AiSubtaskResponse> subtasks = geminiAiService.generateSubtasks(request);
+
+        List<TodoResponse> createdTodos = subtasks.stream().map(sub -> {
+            TodoRequest todoReq = new TodoRequest();
+            todoReq.setTitle(sub.getTitle());
+            todoReq.setDescription(sub.getDescription());
+            todoReq.setStatus(TodoStatus.PENDING);
+            return todoService.createTodo(todoReq, currentUser.getId());
+        }).toList();
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdTodos);
     }
 }
