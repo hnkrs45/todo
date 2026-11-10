@@ -4,7 +4,9 @@ import com.app.todo.dto.request.TodoRequest;
 import com.app.todo.dto.response.TodoResponse;
 import com.app.todo.model.Todo;
 import com.app.todo.model.TodoStatus;
+import com.app.todo.model.User;
 import com.app.todo.repository.TodoRepository;
+import com.app.todo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,8 +18,20 @@ import java.util.stream.Collectors;
 public class TodoService {
 
     private final TodoRepository todoRepository;
+    private final UserRepository userRepository;
 
     public TodoResponse createTodo(TodoRequest request, String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Free tier limitation check (e.g., max 15 tasks)
+        if ("FREE".equalsIgnoreCase(user.getSubscriptionPlan())) {
+            long currentCount = todoRepository.findByUserId(userId).size();
+            if (currentCount >= 15) {
+                throw new RuntimeException("Free tier limit reached (max 15 todos). Upgrade your plan for unlimited tasks.");
+            }
+        }
+        
         Todo todo = Todo.builder()
                 .userId(userId)
                 .title(request.getTitle())
